@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_overlay_window/flutter_overlay_window.dart';
+import '../../services/accessibility_service_helper.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -7,11 +9,91 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  // Mock state for UI presentation
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  // Real Android Permission States
   bool _overlayPermissionGranted = false;
   bool _accessibilityPermissionGranted = false;
-  bool _isServiceEnabled = false; // Master toggle button in app bar
+  bool _isServiceEnabled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _checkAllPermissions();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // When returning from Android System Settings
+    if (state == AppLifecycleState.resumed) {
+      _checkAllPermissions();
+    }
+  }
+
+  /// Check both Overlay and Accessibility permissions
+  Future<void> _checkAllPermissions() async {
+    final overlayGranted = await FlutterOverlayWindow.isPermissionGranted();
+    final accessGranted = await AccessibilityServiceHelper.isAccessibilityEnabled();
+    final active = await FlutterOverlayWindow.isActive();
+
+    if (mounted) {
+      setState(() {
+        _overlayPermissionGranted = overlayGranted;
+        _accessibilityPermissionGranted = accessGranted;
+        _isServiceEnabled = active;
+      });
+    }
+  }
+
+  /// Request Overlay (Display over other apps)
+  Future<void> _requestOverlayPermission() async {
+    final granted = await FlutterOverlayWindow.isPermissionGranted();
+    if (granted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Color(0xFF10B981),
+            content: Text(
+              'Display Overlay is already granted!',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+    await FlutterOverlayWindow.requestPermission();
+  }
+
+  /// Request Accessibility Service (Opens Android Accessibility Settings)
+  Future<void> _requestAccessibilityPermission() async {
+    final isEnabled = await AccessibilityServiceHelper.isAccessibilityEnabled();
+    if (isEnabled) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            backgroundColor: Color(0xFF10B981),
+            content: Text(
+              'Accessibility service is already activated!',
+              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+      return;
+    }
+
+    // Opens Android native Accessibility settings
+    await AccessibilityServiceHelper.openAccessibilitySettings();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,32 +136,27 @@ class _HomeScreenState extends State<HomeScreen> {
                       icon: Icons.layers_outlined,
                       accentColor: const Color(0xFF6366F1), // Electric Indigo
                       title: 'Overlay',
-                      subtitle: 'Display on top',
+                      subtitle: _overlayPermissionGranted
+                          ? 'Permission active'
+                          : 'Tap to open settings',
                       isGranted: _overlayPermissionGranted,
-                      onTap: () {
-                        setState(() {
-                          _overlayPermissionGranted = !_overlayPermissionGranted;
-                        });
-                      },
+                      onTap: _requestOverlayPermission,
                     ),
                   ),
 
                   const SizedBox(width: 12),
 
-                  // Card 2: Accessibility Permission
+                  // Card 2: Accessibility Permission (WIRED TO ANDROID ACCESSIBILITY SETTINGS)
                   Expanded(
                     child: _buildCompactPermissionCard(
                       icon: Icons.accessibility_new_rounded,
                       accentColor: const Color(0xFF38BDF8), // Cyber Cyan
                       title: 'Accessibility',
-                      subtitle: 'Smart gestures',
+                      subtitle: _accessibilityPermissionGranted
+                          ? 'Service active'
+                          : 'Tap to open settings',
                       isGranted: _accessibilityPermissionGranted,
-                      onTap: () {
-                        setState(() {
-                          _accessibilityPermissionGranted =
-                              !_accessibilityPermissionGranted;
-                        });
-                      },
+                      onTap: _requestAccessibilityPermission,
                     ),
                   ),
                 ],
@@ -157,7 +234,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
         // Interactive Toggle Button in App Bar
         GestureDetector(
-          onTap: () {
+          onTap: () async {
+            if (!_overlayPermissionGranted) {
+              await _requestOverlayPermission();
+              return;
+            }
             setState(() {
               _isServiceEnabled = !_isServiceEnabled;
             });
@@ -282,7 +363,7 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Top row: Icon + State Badge
+              // Top row: Icon + State Dot
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -347,7 +428,9 @@ class _HomeScreenState extends State<HomeScreen> {
               Text(
                 subtitle,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
+                  color: isGranted
+                      ? const Color(0xFF10B981)
+                      : Colors.white.withValues(alpha: 0.5),
                   fontSize: 11,
                   fontWeight: FontWeight.w500,
                 ),
@@ -376,7 +459,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 child: Center(
                   child: Text(
-                    isGranted ? 'Enabled' : 'Enable',
+                    isGranted ? 'Active' : 'Settings',
                     style: TextStyle(
                       color: isGranted ? const Color(0xFF10B981) : Colors.white,
                       fontSize: 12,
@@ -409,19 +492,19 @@ class _HomeScreenState extends State<HomeScreen> {
             allGranted
                 ? Icons.verified_user_rounded
                 : Icons.info_outline_rounded,
-            color: allGranted ? const Color(0xFF10B981) : Colors.white54,
+            color: allGranted ? const Color(0xFF10B981) : Colors.amber,
             size: 18,
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               allGranted
-                  ? (_isServiceEnabled
-                      ? 'Privacy Shield is currently running'
-                      : 'All permissions ready. Tap toggle to activate')
-                  : 'Grant required permissions to enable shield',
+                  ? 'All permissions active. Tap toggle on top to start!'
+                  : (!_overlayPermissionGranted
+                      ? 'Display Overlay permission is required.'
+                      : 'Accessibility service recommended for advanced shortcuts.'),
               style: TextStyle(
-                color: allGranted ? Colors.white : Colors.white60,
+                color: allGranted ? Colors.white : Colors.white70,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
