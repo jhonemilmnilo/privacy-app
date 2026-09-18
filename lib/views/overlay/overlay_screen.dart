@@ -53,15 +53,15 @@ class _OverlayEntryPointState extends State<OverlayEntryPoint> {
     super.dispose();
   }
 
-  /// Toggle privacy shade ON/OFF while KEEPING the bubble visible
+  /// Toggle privacy shade ON/OFF while KEEPING the bubble interactive
   Future<void> _togglePrivacyShield() async {
     setState(() {
       _isShieldActive = !_isShieldActive;
     });
 
     if (_isShieldActive) {
-      // Allow taps outside the bubble to pass through to underlying apps (GCash, Messenger, etc.)
-      await FlutterOverlayWindow.updateFlag(OverlayFlag.clickThrough);
+      // Keep touch modal / focus pointer so bubble ALWAYS captures touches
+      await FlutterOverlayWindow.updateFlag(OverlayFlag.focusPointer);
     } else {
       await FlutterOverlayWindow.updateFlag(OverlayFlag.defaultFlag);
     }
@@ -84,23 +84,24 @@ class _OverlayEntryPointState extends State<OverlayEntryPoint> {
     return Material(
       color: Colors.transparent,
       child: Stack(
+        fit: StackFit.expand,
         children: [
           // 1. PRIVACY SHIELD LAYER (Dim Shade / Reading Slit)
-          // Starts strictly BELOW the status bar to keep time, battery, notifications 100% visible!
+          // Starts strictly BELOW the status bar and extends all the way to the very bottom
           if (_isShieldActive)
             Positioned(
               top: statusBarHeight,
               left: 0,
               right: 0,
-              bottom: 0,
+              bottom: -40.0, // Extend past navigation insets to cover 100% of bottom screen
               child: IgnorePointer(
-                ignoring: true, // Let touches pass right through to the underlying phone app!
+                ignoring: true, // Touches on the shade pass through
                 child: _buildShieldContent(screenSize, statusBarHeight),
               ),
             ),
 
           // 2. PERSISTENT FLOATING ASSISTIVE BUBBLE
-          // Always on top, draggable, and tappable to toggle privacy shade
+          // Positioned on top, draggable, and tappable at all times
           Positioned(
             left: _bubbleX,
             top: _bubbleY,
