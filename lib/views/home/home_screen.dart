@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../services/database_service.dart';
 import '../../services/overlay_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -8,9 +9,10 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _hasPermission = false;
   bool _isOverlayActive = false;
+  bool _pendingActivation = false;
 
   // Settings State
   double _opacity = 0.75;
@@ -29,7 +31,51 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _loadSettingsFromDb();
     _checkStatus();
+  }
+
+  Future<void> _loadSettingsFromDb() async {
+    final settings = await DatabaseService.instance.getSettings();
+    if (mounted) {
+      setState(() {
+        _opacity = settings.opacity;
+        _selectedMode = settings.mode;
+        _selectedColor = Color(settings.colorValue);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // When user returns from Android Settings
+    if (state == AppLifecycleState.resumed) {
+      _checkStatusAndAutoActivate();
+    }
+  }
+
+  Future<void> _checkStatusAndAutoActivate() async {
+    final granted = await OverlayService.isPermissionGranted();
+    final active = await OverlayService.isActive();
+    if (mounted) {
+      setState(() {
+        _hasPermission = granted;
+        _isOverlayActive = active;
+      });
+
+      // If user attempted to toggle ON and just came back from granting permission
+      if (granted && _pendingActivation && !active) {
+        _pendingActivation = false;
+        await _activateOverlay();
+      }
+    }
   }
 
   Future<void> _checkStatus() async {
@@ -44,14 +90,30 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _requestPermission() async {
+    _pendingActivation = true;
     final res = await OverlayService.requestPermission();
     if (res == true) {
-      _checkStatus();
+      _checkStatusAndAutoActivate();
+    }
+  }
+
+  Future<void> _activateOverlay() async {
+    await OverlayService.showFloatingBubble();
+    await OverlayService.shareData({
+      'action': 'CONFIG_UPDATE',
+      'opacity': _opacity,
+      'mode': _selectedMode,
+      'colorValue': _selectedColor.toARGB32(),
+      'slitHeight': _slitHeight,
+    });
+    if (mounted) {
+      setState(() => _isOverlayActive = true);
     }
   }
 
   Future<void> _toggleService() async {
     if (!_hasPermission) {
+      _pendingActivation = true;
       await _requestPermission();
       return;
     }
@@ -60,20 +122,21 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       await OverlayService.closeOverlay();
       setState(() => _isOverlayActive = false);
     } else {
-      await OverlayService.showFloatingBubble();
-      // Send current config
-      await OverlayService.shareData({
-        'action': 'CONFIG_UPDATE',
-        'opacity': _opacity,
-        'mode': _selectedMode,
-        'colorValue': _selectedColor.toARGB32(),
-        'slitHeight': _slitHeight,
-      });
-      setState(() => _isOverlayActive = true);
+      await _activateOverlay();
     }
   }
 
   void _syncConfigToOverlay() {
+    // Save to SQLite
+    DatabaseService.instance.saveSettings(
+      PrivacySettings(
+        opacity: _opacity,
+        mode: _selectedMode,
+        colorValue: _selectedColor.toARGB32(),
+        slitHeight: _slitHeight,
+      ),
+    );
+
     if (_isOverlayActive) {
       OverlayService.shareData({
         'action': 'CONFIG_UPDATE',
