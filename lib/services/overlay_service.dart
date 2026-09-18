@@ -16,8 +16,14 @@ class OverlayService {
     return await FlutterOverlayWindow.isActive();
   }
 
-  /// Show the floating assistive touch bubble
-  static Future<void> showFloatingBubble() async {
+  /// Show the floating assistive touch bubble with full-screen capability
+  static Future<void> showFloatingBubble({
+    required double opacity,
+    required String mode,
+    required int colorValue,
+    required double slitHeight,
+    required double bubbleSize,
+  }) async {
     final bool granted = await isPermissionGranted();
     if (!granted) {
       final bool? res = await requestPermission();
@@ -29,16 +35,26 @@ class OverlayService {
     }
 
     await FlutterOverlayWindow.showOverlay(
-      enableDrag: true,
+      enableDrag: false,
       overlayTitle: "Privacy Screen Active",
       overlayContent: "Tap assistive touch to toggle privacy filter",
       flag: OverlayFlag.defaultFlag,
-      alignment: OverlayAlignment.centerRight,
+      alignment: OverlayAlignment.center,
       visibility: NotificationVisibility.visibilityPublic,
-      positionGravity: PositionGravity.auto,
-      height: 160,
-      width: 160,
+      positionGravity: PositionGravity.none,
+      height: WindowSize.matchParent,
+      width: WindowSize.matchParent,
     );
+
+    // Sync initial configuration to overlay isolate
+    await shareData({
+      'action': 'CONFIG_UPDATE',
+      'opacity': opacity,
+      'mode': mode,
+      'colorValue': colorValue,
+      'slitHeight': slitHeight,
+      'bubbleSize': bubbleSize,
+    });
   }
 
   /// Show full-screen privacy screen with touch passthrough

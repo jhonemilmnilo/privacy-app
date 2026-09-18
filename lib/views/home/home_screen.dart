@@ -19,6 +19,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   String _selectedMode = 'dim'; // 'dim' or 'slit'
   Color _selectedColor = Colors.black;
   final double _slitHeight = 130.0;
+  double _bubbleSize = 58.0; // 46.0: Small, 58.0: Medium, 70.0: Large
 
   final List<Color> _availableColors = [
     Colors.black,
@@ -43,6 +44,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _opacity = settings.opacity;
         _selectedMode = settings.mode;
         _selectedColor = Color(settings.colorValue);
+        _bubbleSize = settings.bubbleSize;
       });
     }
   }
@@ -98,14 +100,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _activateOverlay() async {
-    await OverlayService.showFloatingBubble();
-    await OverlayService.shareData({
-      'action': 'CONFIG_UPDATE',
-      'opacity': _opacity,
-      'mode': _selectedMode,
-      'colorValue': _selectedColor.toARGB32(),
-      'slitHeight': _slitHeight,
-    });
+    await OverlayService.showFloatingBubble(
+      opacity: _opacity,
+      mode: _selectedMode,
+      colorValue: _selectedColor.toARGB32(),
+      slitHeight: _slitHeight,
+      bubbleSize: _bubbleSize,
+    );
     if (mounted) {
       setState(() => _isOverlayActive = true);
     }
@@ -134,6 +135,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         mode: _selectedMode,
         colorValue: _selectedColor.toARGB32(),
         slitHeight: _slitHeight,
+        bubbleSize: _bubbleSize,
       ),
     );
 
@@ -144,6 +146,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         'mode': _selectedMode,
         'colorValue': _selectedColor.toARGB32(),
         'slitHeight': _slitHeight,
+        'bubbleSize': _bubbleSize,
       });
     }
   }
@@ -352,7 +355,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             ),
                             const SizedBox(height: 4),
                             Text(
-                              'Tap the floating bubble anytime to instantly activate screen shield.',
+                              'Tap the floating bubble to instantly shield screen. Status bar remains clear!',
                               style: TextStyle(
                                 color: Colors.white.withValues(alpha: 0.6),
                                 fontSize: 13,
@@ -392,7 +395,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ),
                     const SizedBox(height: 12),
                     Container(
-                      height: 200,
+                      height: 220,
                       width: double.infinity,
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(20),
@@ -403,96 +406,151 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         borderRadius: BorderRadius.circular(20),
                         child: Stack(
                           children: [
-                            // Fake sensitive bank screen content
-                            Padding(
-                              padding: const EdgeInsets.all(18),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
+                            // Fake Phone Frame Content
+                            Column(
+                              children: [
+                                // Unaffected Status Bar Header (Simulated)
+                                Container(
+                                  height: 28,
+                                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                                  color: Colors.black.withValues(alpha: 0.3),
+                                  child: const Row(
                                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                     children: [
-                                      const Text(
-                                        'My Savings Account',
-                                        style: TextStyle(
-                                          color: Colors.white70,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                        decoration: BoxDecoration(
-                                          color: Colors.blue.withValues(alpha: 0.2),
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        child: const Text(
-                                          'GCash/Bank',
-                                          style: TextStyle(color: Colors.cyanAccent, fontSize: 11),
-                                        ),
+                                      Text('9:41', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+                                      Row(
+                                        children: [
+                                          Icon(Icons.wifi, color: Colors.white, size: 14),
+                                          SizedBox(width: 4),
+                                          Icon(Icons.battery_full, color: Colors.greenAccent, size: 14),
+                                        ],
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 14),
-                                  const Text(
-                                    '₱ 185,420.50',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 26,
-                                      fontWeight: FontWeight.bold,
+                                ),
+                                // Sensitive content area
+                                Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(16),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            const Text(
+                                              'My Savings Account',
+                                              style: TextStyle(
+                                                color: Colors.white70,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: Colors.blue.withValues(alpha: 0.2),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: const Text(
+                                                'GCash/Bank',
+                                                style: TextStyle(color: Colors.cyanAccent, fontSize: 11),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 10),
+                                        const Text(
+                                          '₱ 185,420.50',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 24,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 10),
+                                        const Text(
+                                          'Private message: "Transfer received. Passcode confirmed."',
+                                          style: TextStyle(color: Colors.white60, fontSize: 12),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  const SizedBox(height: 12),
-                                  const Text(
-                                    'Private message: "Hey babe, sending the passcode for our secret vault..."',
-                                    style: TextStyle(color: Colors.white60, fontSize: 13),
-                                  ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
 
-                            // Applied Privacy Filter Overlay Preview
-                            if (_selectedMode == 'dim')
-                              Container(
-                                width: double.infinity,
-                                height: double.infinity,
-                                color: _selectedColor.withValues(alpha: _opacity),
-                              )
-                            else
-                              Column(
-                                children: [
-                                  Expanded(
-                                    child: Container(
+                            // Applied Privacy Filter Overlay Preview (Starts BELOW status bar!)
+                            Positioned(
+                              top: 28, // Status bar stays clear
+                              left: 0,
+                              right: 0,
+                              bottom: 0,
+                              child: _selectedMode == 'dim'
+                                  ? Container(
                                       color: _selectedColor.withValues(alpha: _opacity),
-                                    ),
-                                  ),
-                                  Container(
-                                    height: 50,
-                                    decoration: BoxDecoration(
-                                      border: Border.symmetric(
-                                        horizontal: BorderSide(
-                                          color: Colors.cyanAccent.withValues(alpha: 0.8),
-                                          width: 1.5,
+                                    )
+                                  : Column(
+                                      children: [
+                                        Expanded(
+                                          child: Container(
+                                            color: _selectedColor.withValues(alpha: _opacity),
+                                          ),
                                         ),
-                                      ),
-                                    ),
-                                    child: const Center(
-                                      child: Text(
-                                        '👁️ Reading Slit Area',
-                                        style: TextStyle(
-                                          color: Colors.cyanAccent,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
+                                        Container(
+                                          height: 50,
+                                          decoration: BoxDecoration(
+                                            border: Border.symmetric(
+                                              horizontal: BorderSide(
+                                                color: Colors.cyanAccent.withValues(alpha: 0.8),
+                                                width: 1.5,
+                                              ),
+                                            ),
+                                          ),
+                                          child: const Center(
+                                            child: Text(
+                                              '👁️ Reading Slit Area',
+                                              style: TextStyle(
+                                                color: Colors.cyanAccent,
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
                                         ),
-                                      ),
+                                        Expanded(
+                                          child: Container(
+                                            color: _selectedColor.withValues(alpha: _opacity),
+                                          ),
+                                        ),
+                                      ],
                                     ),
+                            ),
+
+                            // Floating Bubble Preview inside simulator
+                            Positioned(
+                              right: 14,
+                              top: 70,
+                              child: Container(
+                                width: _bubbleSize * 0.6,
+                                height: _bubbleSize * 0.6,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFF6366F1), Color(0xFF3B82F6)],
                                   ),
-                                  Expanded(
-                                    child: Container(
-                                      color: _selectedColor.withValues(alpha: _opacity),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFF6366F1).withValues(alpha: 0.5),
+                                      blurRadius: 10,
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                  border: Border.all(color: Colors.white, width: 1.5),
+                                ),
+                                child: const Center(
+                                  child: Icon(Icons.shield_outlined, color: Colors.white, size: 16),
+                                ),
                               ),
+                            ),
                           ],
                         ),
                       ),
@@ -525,7 +583,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                           child: _buildModeCard(
                             mode: 'dim',
                             title: 'Full Dim Shade',
-                            subtitle: 'Evenly dims the whole screen',
+                            subtitle: 'Dims screen below status bar',
                             icon: Icons.brightness_medium_rounded,
                           ),
                         ),
@@ -545,10 +603,61 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
             ),
 
+            // Bubble Size Selector Section
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF131B2E),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Assistive Bubble Size',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            _bubbleSize <= 48 ? 'Compact (46dp)' : (_bubbleSize >= 68 ? 'Large (70dp)' : 'Standard (58dp)'),
+                            style: const TextStyle(
+                              color: Color(0xFF38BDF8),
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          Expanded(child: _buildSizeOption('Compact', 46.0)),
+                          const SizedBox(width: 10),
+                          Expanded(child: _buildSizeOption('Standard', 58.0)),
+                          const SizedBox(width: 10),
+                          Expanded(child: _buildSizeOption('Large', 70.0)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
             // Opacity Darkness Slider
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 child: Container(
                   padding: const EdgeInsets.all(20),
                   decoration: BoxDecoration(
@@ -672,6 +781,38 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               child: SizedBox(height: 40),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSizeOption(String label, double size) {
+    final isSelected = (_bubbleSize - size).abs() < 2.0;
+    return GestureDetector(
+      onTap: () {
+        setState(() => _bubbleSize = size);
+        _syncConfigToOverlay();
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF1E293B) : const Color(0xFF0F172A),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF38BDF8) : Colors.white12,
+            width: isSelected ? 1.8 : 1.0,
+          ),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isSelected ? const Color(0xFF38BDF8) : Colors.white70,
+              fontSize: 13,
+              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            ),
+          ),
         ),
       ),
     );

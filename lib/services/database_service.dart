@@ -7,6 +7,7 @@ class PrivacySettings {
   final String mode; // 'dim' or 'slit'
   final int colorValue;
   final double slitHeight;
+  final double bubbleSize;
   final bool autoStartOnBoot;
 
   PrivacySettings({
@@ -15,6 +16,7 @@ class PrivacySettings {
     required this.mode,
     required this.colorValue,
     required this.slitHeight,
+    this.bubbleSize = 58.0,
     this.autoStartOnBoot = false,
   });
 
@@ -25,6 +27,7 @@ class PrivacySettings {
       'mode': mode,
       'colorValue': colorValue,
       'slitHeight': slitHeight,
+      'bubbleSize': bubbleSize,
       'autoStartOnBoot': autoStartOnBoot ? 1 : 0,
     };
   }
@@ -36,6 +39,7 @@ class PrivacySettings {
       mode: map['mode'] as String? ?? 'dim',
       colorValue: map['colorValue'] as int? ?? 0xFF000000,
       slitHeight: (map['slitHeight'] as num?)?.toDouble() ?? 130.0,
+      bubbleSize: (map['bubbleSize'] as num?)?.toDouble() ?? 58.0,
       autoStartOnBoot: (map['autoStartOnBoot'] as int? ?? 0) == 1,
     );
   }
@@ -59,7 +63,12 @@ class DatabaseService {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('ALTER TABLE settings ADD COLUMN bubbleSize REAL DEFAULT 58.0');
+        }
+      },
       onCreate: (db, version) async {
         // Table for user settings
         await db.execute('''
@@ -69,6 +78,7 @@ class DatabaseService {
             mode TEXT NOT NULL,
             colorValue INTEGER NOT NULL,
             slitHeight REAL NOT NULL,
+            bubbleSize REAL NOT NULL DEFAULT 58.0,
             autoStartOnBoot INTEGER NOT NULL DEFAULT 0
           )
         ''');
@@ -90,6 +100,7 @@ class DatabaseService {
           'mode': 'dim',
           'colorValue': 0xFF000000,
           'slitHeight': 130.0,
+          'bubbleSize': 58.0,
           'autoStartOnBoot': 0,
         });
       },
