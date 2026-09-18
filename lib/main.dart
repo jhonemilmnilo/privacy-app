@@ -1,21 +1,23 @@
 import 'package:flutter/material.dart';
 import 'views/home/home_screen.dart';
-import 'views/overlay/overlay_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(const PrivacyApp());
 }
 
-/// Dedicated background entry point for the overlay window.
-/// flutter_overlay_window looks for @pragma("vm:entry-point") overlayMain()
 @pragma("vm:entry-point")
 void overlayMain() {
   WidgetsFlutterBinding.ensureInitialized();
   runApp(
     const MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: OverlayEntryPoint(),
+      home: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Center(
+          child: Text('Overlay Init', style: TextStyle(color: Colors.white)),
+        ),
+      ),
     ),
   );
 }
@@ -26,7 +28,7 @@ class PrivacyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Privacy Screen',
+      title: 'Privacy Shade',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
