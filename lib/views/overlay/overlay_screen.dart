@@ -18,11 +18,6 @@ class _OverlayEntryPointState extends State<OverlayEntryPoint> {
   double _slitHeight = 130.0;
   double _bubbleSize = 58.0;
 
-  // Responsive bubble coordinates (default: right side of screen)
-  double _bubbleX = 300.0;
-  double _bubbleY = 250.0;
-  bool _isInitialPositionSet = false;
-
   StreamSubscription? _dataSubscription;
 
   @override
@@ -53,162 +48,161 @@ class _OverlayEntryPointState extends State<OverlayEntryPoint> {
     super.dispose();
   }
 
-  /// Toggle privacy shade ON/OFF while KEEPING the bubble interactive
+  /// Toggle privacy shade ON and OFF
   Future<void> _togglePrivacyShield() async {
+    final nextState = !_isShieldActive;
     setState(() {
-      _isShieldActive = !_isShieldActive;
+      _isShieldActive = nextState;
     });
 
-    if (_isShieldActive) {
-      // Keep touch modal / focus pointer so bubble ALWAYS captures touches
-      await FlutterOverlayWindow.updateFlag(OverlayFlag.focusPointer);
+    if (nextState) {
+      // SHIELD ON: Expand window to full screen with clickThrough flag
+      // so touches on underlying apps pass right through!
+      await FlutterOverlayWindow.resizeOverlay(
+        WindowSize.matchParent,
+        WindowSize.matchParent,
+        false,
+      );
+      await FlutterOverlayWindow.updateFlag(OverlayFlag.clickThrough);
     } else {
+      // SHIELD OFF: Shrink window back to compact interactive bubble!
+      final int size = _bubbleSize.toInt() + 16;
+      await FlutterOverlayWindow.resizeOverlay(size, size, false);
       await FlutterOverlayWindow.updateFlag(OverlayFlag.defaultFlag);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-    final statusBarHeight = MediaQuery.of(context).padding.top > 0 
-        ? MediaQuery.of(context).padding.top 
-        : 36.0; // fallback standard status bar height
-
-    // Initialize responsive bubble position once screen size is known
-    if (!_isInitialPositionSet && screenSize.width > 0) {
-      _bubbleX = screenSize.width - _bubbleSize - 16.0;
-      _bubbleY = screenSize.height * 0.35;
-      _isInitialPositionSet = true;
-    }
-
     return Material(
       color: Colors.transparent,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // 1. PRIVACY SHIELD LAYER (Dim Shade / Reading Slit)
-          // Starts strictly BELOW the status bar and extends all the way to the very bottom
-          if (_isShieldActive)
-            Positioned(
-              top: statusBarHeight,
-              left: 0,
-              right: 0,
-              bottom: -40.0, // Extend past navigation insets to cover 100% of bottom screen
-              child: IgnorePointer(
-                ignoring: true, // Touches on the shade pass through
-                child: _buildShieldContent(screenSize, statusBarHeight),
-              ),
-            ),
+      child: _isShieldActive ? _buildShieldOverlay() : _buildCompactBubble(),
+    );
+  }
 
-          // 2. PERSISTENT FLOATING ASSISTIVE BUBBLE
-          // Positioned on top, draggable, and tappable at all times
-          Positioned(
-            left: _bubbleX,
-            top: _bubbleY,
-            child: _buildAssistiveBubble(screenSize, statusBarHeight),
+  /// 1. COMPACT BUBBLE (IDLE MODE)
+  /// Sized strictly to the bubble - zero blocking of underlying apps!
+  Widget _buildCompactBubble() {
+    return Center(
+      child: GestureDetector(
+        onTap: _togglePrivacyShield,
+        child: Container(
+          width: _bubbleSize,
+          height: _bubbleSize,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const LinearGradient(
+              colors: [Color(0xFF6366F1), Color(0xFF3B82F6)],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF6366F1).withValues(alpha: 0.5),
+                blurRadius: 14,
+                spreadRadius: 2,
+                offset: const Offset(0, 3),
+              ),
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.35),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.9),
+              width: 2.2,
+            ),
           ),
-        ],
+          child: Center(
+            child: Icon(
+              Icons.shield_outlined,
+              color: Colors.white,
+              size: _bubbleSize * 0.48,
+            ),
+          ),
+        ),
       ),
     );
   }
 
-  /// Builds the Privacy Filter (Full Dim or Reading Slit)
-  Widget _buildShieldContent(Size screenSize, double statusBarHeight) {
-    if (_mode == 'dim') {
-      return Container(
-        width: double.infinity,
-        height: double.infinity,
-        color: _tintColor.withValues(alpha: _opacity),
-      );
-    } else {
-      // Reading Slit Mode: Top blackout + Clear viewing window + Bottom blackout
-      final responsiveSlitHeight = _slitHeight.clamp(80.0, screenSize.height * 0.35);
-      return Column(
-        children: [
-          // Top dark area
-          Expanded(
+  /// 2. PRIVACY SHIELD (ACTIVE MODE)
+  /// Full-screen dim tint with status-bar cutout and a floating Quick-Dismiss toggle!
+  Widget _buildShieldOverlay() {
+    final screenSize = MediaQuery.of(context).size;
+    final statusBarHeight = MediaQuery.of(context).padding.top > 0 
+        ? MediaQuery.of(context).padding.top 
+        : 36.0;
+
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Privacy Tint starting strictly BELOW the status bar, covering full bottom
+        Positioned(
+          top: statusBarHeight,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: _mode == 'dim'
+              ? Container(
+                  width: double.infinity,
+                  height: double.infinity,
+                  color: _tintColor.withValues(alpha: _opacity),
+                )
+              : Column(
+                  children: [
+                    Expanded(child: Container(color: _tintColor.withValues(alpha: _opacity))),
+                    Container(
+                      height: _slitHeight.clamp(80.0, screenSize.height * 0.35),
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        border: Border.symmetric(
+                          horizontal: BorderSide(
+                            color: Colors.cyanAccent.withValues(alpha: 0.7),
+                            width: 1.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Expanded(child: Container(color: _tintColor.withValues(alpha: _opacity))),
+                  ],
+                ),
+        ),
+
+        // Floating Active Dismiss Bubble (Positioned conveniently on right edge)
+        Positioned(
+          right: 16,
+          top: statusBarHeight + 20,
+          child: GestureDetector(
+            onTap: _togglePrivacyShield,
             child: Container(
-              color: _tintColor.withValues(alpha: _opacity),
-            ),
-          ),
-          // Clear viewing slot (allows dead-center reading of message/bank balance)
-          Container(
-            height: responsiveSlitHeight,
-            width: double.infinity,
-            decoration: BoxDecoration(
-              border: Border.symmetric(
-                horizontal: BorderSide(
-                  color: Colors.cyanAccent.withValues(alpha: 0.7),
-                  width: 1.5,
+              width: _bubbleSize,
+              height: _bubbleSize,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF10B981), Color(0xFF059669)],
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.6),
+                    blurRadius: 16,
+                    spreadRadius: 3,
+                  ),
+                ],
+                border: Border.all(color: Colors.white, width: 2.2),
+              ),
+              child: Center(
+                child: Icon(
+                  Icons.shield,
+                  color: Colors.white,
+                  size: _bubbleSize * 0.48,
                 ),
               ),
             ),
           ),
-          // Bottom dark area
-          Expanded(
-            child: Container(
-              color: _tintColor.withValues(alpha: _opacity),
-            ),
-          ),
-        ],
-      );
-    }
-  }
-
-  /// Builds the Assistive Touch Bubble with drag physics & active state glow
-  Widget _buildAssistiveBubble(Size screenSize, double statusBarHeight) {
-    return GestureDetector(
-      onTap: _togglePrivacyShield,
-      onPanUpdate: (details) {
-        setState(() {
-          _bubbleX += details.delta.dx;
-          _bubbleY += details.delta.dy;
-
-          // Responsive clamping to keep bubble safely within phone screen bounds
-          _bubbleX = _bubbleX.clamp(8.0, (screenSize.width - _bubbleSize - 8.0).clamp(0.0, screenSize.width));
-          _bubbleY = _bubbleY.clamp(statusBarHeight + 8.0, (screenSize.height - _bubbleSize - 16.0).clamp(0.0, screenSize.height));
-        });
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        width: _bubbleSize,
-        height: _bubbleSize,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: LinearGradient(
-            colors: _isShieldActive
-                ? [const Color(0xFF10B981), const Color(0xFF059669)] // Green glow when ACTIVE
-                : [const Color(0xFF6366F1), const Color(0xFF3B82F6)], // Indigo/Blue when IDLE
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: (_isShieldActive ? const Color(0xFF10B981) : const Color(0xFF6366F1))
-                  .withValues(alpha: _isShieldActive ? 0.6 : 0.4),
-              blurRadius: _isShieldActive ? 18 : 12,
-              spreadRadius: _isShieldActive ? 3 : 1,
-              offset: const Offset(0, 3),
-            ),
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.35),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
-          ],
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.85),
-            width: 2.0,
-          ),
         ),
-        child: Center(
-          child: Icon(
-            _isShieldActive ? Icons.shield : Icons.shield_outlined,
-            color: Colors.white,
-            size: _bubbleSize * 0.48, // Proportionally scales icon with bubble size
-          ),
-        ),
-      ),
+      ],
     );
   }
 }
