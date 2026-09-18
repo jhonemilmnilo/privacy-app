@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
-import '../../services/accessibility_service_helper.dart';
+import '../../services/battery_service_helper.dart';
+import '../../utils/app_toast.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -10,9 +11,9 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
-  // Real Android Permission States
+  // Real Android System States
   bool _overlayPermissionGranted = false;
-  bool _accessibilityPermissionGranted = false;
+  bool _batteryOptimizationIgnored = false;
   bool _isServiceEnabled = false;
 
   @override
@@ -36,16 +37,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-  /// Check both Overlay and Accessibility permissions
+  /// Check both Overlay and Battery Keep-Alive permissions
   Future<void> _checkAllPermissions() async {
     final overlayGranted = await FlutterOverlayWindow.isPermissionGranted();
-    final accessGranted = await AccessibilityServiceHelper.isAccessibilityEnabled();
+    final batteryIgnored = await BatteryServiceHelper.isBatteryOptimizationIgnored();
     final active = await FlutterOverlayWindow.isActive();
 
     if (mounted) {
       setState(() {
         _overlayPermissionGranted = overlayGranted;
-        _accessibilityPermissionGranted = accessGranted;
+        _batteryOptimizationIgnored = batteryIgnored;
         _isServiceEnabled = active;
       });
     }
@@ -56,15 +57,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final granted = await FlutterOverlayWindow.isPermissionGranted();
     if (granted) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            backgroundColor: Color(0xFF10B981),
-            content: Text(
-              'Display Overlay is already granted!',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-            ),
-            duration: Duration(seconds: 2),
-          ),
+        AppToast.success(
+          context,
+          message: 'Display Overlay is already granted and active!',
         );
       }
       return;
@@ -72,33 +67,82 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await FlutterOverlayWindow.requestPermission();
   }
 
-  /// Request Accessibility Service (Opens Android Accessibility Settings)
-  Future<void> _requestAccessibilityPermission() async {
-    final isEnabled = await AccessibilityServiceHelper.isAccessibilityEnabled();
-    if (isEnabled) {
+  /// Request Battery Unrestricted Mode (Keep-Alive)
+  Future<void> _requestBatteryOptimization() async {
+    final isIgnored = await BatteryServiceHelper.isBatteryOptimizationIgnored();
+    if (isIgnored) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            backgroundColor: Color(0xFF10B981),
-            content: Text(
-              'Accessibility service is already activated!',
-              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-            ),
-            duration: Duration(seconds: 2),
-          ),
+        AppToast.success(
+          context,
+          message: 'Keep-Alive is already set to Unrestricted!',
         );
       }
       return;
     }
 
-    // Opens Android native Accessibility settings
-    await AccessibilityServiceHelper.openAccessibilitySettings();
+    await BatteryServiceHelper.requestIgnoreBatteryOptimization();
+  }
+
+  /// Master Toggle sa App Bar with smart validation and toasts
+  Future<void> _handleMasterToggle() async {
+    // 1. Mandatory Overlay Check
+    if (!_overlayPermissionGranted) {
+      AppToast.warning(
+        context,
+        message: 'Action Required: Please enable "Overlay" permission first so the bubble can float.',
+        actionLabel: 'Enable',
+        onAction: _requestOverlayPermission,
+      );
+      return;
+    }
+
+    // 2. Keep-Alive / Battery Advisory Check
+    if (!_batteryOptimizationIgnored && !_isServiceEnabled) {
+      AppToast.warning(
+        context,
+        message: 'Notice: "Keep-Alive" is not enabled. Android may close the bubble in the background.',
+        actionLabel: 'Fix',
+        onAction: _requestBatteryOptimization,
+      );
+    }
+
+    // 3. Toggle Action
+    if (_isServiceEnabled) {
+      await FlutterOverlayWindow.closeOverlay();
+      setState(() => _isServiceEnabled = false);
+      if (mounted) {
+        AppToast.show(
+          context,
+          message: 'Privacy bubble disabled.',
+          icon: Icons.shield_outlined,
+          accentColor: Colors.white54,
+        );
+      }
+    } else {
+      await FlutterOverlayWindow.showOverlay(
+        enableDrag: true,
+        overlayTitle: "Privacy Shield Active",
+        overlayContent: "Floating bubble is shielding your screen",
+        flag: OverlayFlag.defaultFlag,
+        alignment: OverlayAlignment.centerRight,
+        visibility: NotificationVisibility.visibilityPublic,
+        positionGravity: PositionGravity.auto,
+        height: 72,
+        width: 72,
+      );
+      setState(() => _isServiceEnabled = true);
+      if (mounted) {
+        AppToast.success(
+          context,
+          message: 'Privacy bubble is now floating on screen!',
+        );
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final allPermissionsGranted =
-        _overlayPermissionGranted && _accessibilityPermissionGranted;
+    final allReady = _overlayPermissionGranted && _batteryOptimizationIgnored;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0B0F19), // Deep Matte Obsidian
@@ -109,14 +153,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Sleek Header with Interactive Toggle Switch
+              // 1. Sleek Header with Master Toggle Switch
               _buildHeader(),
 
               const SizedBox(height: 24),
 
               // Section Label
               const Text(
-                'PERMISSIONS SETUP',
+                'PERMISSIONS & BACKGROUND SETUP',
                 style: TextStyle(
                   color: Color(0xFF6366F1),
                   fontSize: 12,
@@ -138,7 +182,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       title: 'Overlay',
                       subtitle: _overlayPermissionGranted
                           ? 'Permission active'
-                          : 'Tap to open settings',
+                          : 'Display on top',
                       isGranted: _overlayPermissionGranted,
                       onTap: _requestOverlayPermission,
                     ),
@@ -146,17 +190,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
                   const SizedBox(width: 12),
 
-                  // Card 2: Accessibility Permission (WIRED TO ANDROID ACCESSIBILITY SETTINGS)
+                  // Card 2: Keep Alive / Battery Optimization
                   Expanded(
                     child: _buildCompactPermissionCard(
-                      icon: Icons.accessibility_new_rounded,
+                      icon: Icons.battery_charging_full_rounded,
                       accentColor: const Color(0xFF38BDF8), // Cyber Cyan
-                      title: 'Accessibility',
-                      subtitle: _accessibilityPermissionGranted
-                          ? 'Service active'
-                          : 'Tap to open settings',
-                      isGranted: _accessibilityPermissionGranted,
-                      onTap: _requestAccessibilityPermission,
+                      title: 'Keep-Alive',
+                      subtitle: _batteryOptimizationIgnored
+                          ? 'Unrestricted'
+                          : 'Don\'t kill bubble',
+                      isGranted: _batteryOptimizationIgnored,
+                      onTap: _requestBatteryOptimization,
                     ),
                   ),
                 ],
@@ -165,7 +209,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               const SizedBox(height: 24),
 
               // 3. Status Summary Pill
-              _buildStatusFooter(allPermissionsGranted),
+              _buildStatusFooter(allReady),
             ],
           ),
         ),
@@ -218,7 +262,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ),
                 ),
                 Text(
-                  _isServiceEnabled ? 'Shield Active' : 'Shield Inactive',
+                  _isServiceEnabled ? 'Bubble Floating' : 'Bubble Idle',
                   style: TextStyle(
                     color: _isServiceEnabled
                         ? const Color(0xFF10B981)
@@ -232,17 +276,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ],
         ),
 
-        // Interactive Toggle Button in App Bar
+        // Interactive Master Toggle in App Bar
         GestureDetector(
-          onTap: () async {
-            if (!_overlayPermissionGranted) {
-              await _requestOverlayPermission();
-              return;
-            }
-            setState(() {
-              _isServiceEnabled = !_isServiceEnabled;
-            });
-          },
+          onTap: _handleMasterToggle,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 250),
             curve: Curves.easeInOut,
@@ -475,7 +511,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  Widget _buildStatusFooter(bool allGranted) {
+  Widget _buildStatusFooter(bool allReady) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -489,22 +525,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       child: Row(
         children: [
           Icon(
-            allGranted
+            allReady
                 ? Icons.verified_user_rounded
                 : Icons.info_outline_rounded,
-            color: allGranted ? const Color(0xFF10B981) : Colors.amber,
+            color: allReady ? const Color(0xFF10B981) : Colors.amber,
             size: 18,
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              allGranted
-                  ? 'All permissions active. Tap toggle on top to start!'
+              allReady
+                  ? 'All systems ready! The bubble will survive even if app is closed.'
                   : (!_overlayPermissionGranted
-                      ? 'Display Overlay permission is required.'
-                      : 'Accessibility service recommended for advanced shortcuts.'),
+                      ? 'Enable Overlay so bubble can float over apps.'
+                      : 'Set Keep-Alive to Unrestricted so Android won\'t kill the bubble.'),
               style: TextStyle(
-                color: allGranted ? Colors.white : Colors.white70,
+                color: allReady ? Colors.white : Colors.white70,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),

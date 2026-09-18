@@ -1,33 +1,34 @@
 package com.example.privacy_apps
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.os.PowerManager
 import android.provider.Settings
-import android.text.TextUtils
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
-    private val CHANNEL = "com.example.privacy_apps/accessibility"
+    private val CHANNEL = "com.example.privacy_apps/system_permissions"
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
-                "isAccessibilityEnabled" -> {
-                    val enabled = isAccessibilityServiceEnabled(applicationContext)
-                    result.success(enabled)
+                "isBatteryOptimizationIgnored" -> {
+                    val isIgnored = isIgnoringBatteryOptimizations(applicationContext)
+                    result.success(isIgnored)
                 }
-                "openAccessibilitySettings" -> {
+                "requestIgnoreBatteryOptimization" -> {
                     try {
-                        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
-                        startActivity(intent)
+                        requestBatteryOptimization(applicationContext)
                         result.success(true)
                     } catch (e: Exception) {
-                        result.error("INTENT_ERROR", e.localizedMessage, null)
+                        result.error("BATTERY_ERROR", e.localizedMessage, null)
                     }
                 }
                 else -> {
@@ -37,22 +38,30 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun isAccessibilityServiceEnabled(context: Context): Boolean {
-        val expectedServiceName = "${context.packageName}/"
-        val enabledServices = Settings.Secure.getString(
-            context.contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        ) ?: return false
+    private fun isIgnoringBatteryOptimizations(context: Context): Boolean {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val powerManager = context.getSystemService(Context.POWER_SERVICE) as? PowerManager
+            return powerManager?.isIgnoringBatteryOptimizations(context.packageName) ?: false
+        }
+        return true
+    }
 
-        val colonSplitter = TextUtils.SimpleStringSplitter(':')
-        colonSplitter.setString(enabledServices)
-
-        while (colonSplitter.hasNext()) {
-            val componentName = colonSplitter.next()
-            if (componentName.contains(context.packageName, ignoreCase = true)) {
-                return true
+    @SuppressLint("BatteryLife")
+    private fun requestBatteryOptimization(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            try {
+                val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                    data = Uri.parse("package:${context.packageName}")
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                // Fallback to general battery saver settings if direct dialog is restricted
+                val fallbackIntent = Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                }
+                startActivity(fallbackIntent)
             }
         }
-        return false
     }
 }
